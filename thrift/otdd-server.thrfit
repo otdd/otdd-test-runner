@@ -1,0 +1,26 @@
+
+namespace java otdd.io
+namespace go otdd
+
+struct TestCase{
+	1:string testId,
+        2:string runId,
+        3:i32 port,
+        4:list<string> passthroughConnections,
+        5:binary inboundRequest,
+}
+
+struct TestResult{
+	1:string testId,
+        2:string runId,
+        3:binary inboundRequest,
+        4:string inboundRequestErr,
+        5:binary inboundResponse,
+        6:string inboundResponseErr,
+}
+
+service OtddTestRunnerService{
+	TestCase fetchTestCase(1:string username, 2:string tag, 3:string mac),
+	binary fetchOutboundResp(1:string testId, 2:binary req),
+	bool reportTestResult(1:TestResult result),
+}

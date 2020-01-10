@@ -12,6 +12,8 @@ import (
 	"time"
 	"errors"
 	"strconv"
+	otdd "otdd-test-runner/thrift/gen-go/otdd"
+	"github.com/apache/thrift/lib/go/thrift"
 	//"bytes"
 	//"encoding/base64"
 )
@@ -31,6 +33,7 @@ var passthroughContentFileChan = make(chan string,10)
 
 var redirectIpPort = ""
 
+/*
 type TestCase struct {
 	testId string
 	runId string
@@ -47,6 +50,7 @@ type TestResult struct {
 	inboundResponse [] byte
 	inboundResponseErr string
 }
+*/
 
 type TestRunner struct {
 	username string
@@ -55,7 +59,9 @@ type TestRunner struct {
 	listenPort int
 	otddServerHost string
 	otddServerPort int
-	currentTestCase *TestCase
+	currentTestCase *otdd.TestCase
+	thriftClient *otdd.OtddTestRunnerServiceClient
+	transport thrift.TTransport
 }
 
 func NewTestRunner(username string,tag string,macAddr string,listenPort int,
@@ -72,6 +78,7 @@ func NewTestRunner(username string,tag string,macAddr string,listenPort int,
 }
 
 func (t *TestRunner) Start() error {
+	
 	//listen on port to receive out-bound requests redirected by iptables.
 	go t.listen()
 	for {
@@ -90,24 +97,52 @@ func (t *TestRunner) Start() error {
 	}
 }
 
-func (t *TestRunner) fetchTest() (*TestCase,error) {
+func (t *TestRunner) getOtddThriftClient() (*otdd.OtddTestRunnerServiceClient,error) {
+
+	if t.transport.IsOpen() {
+		return t.thriftClient,nil
+	}
+
+	// connecto to otdd server
+	transportFactory := thrift.NewTFramedTransportFactory(thrift.NewTTransportFactory())
+	protocolFactory := thrift.NewTBinaryProtocolFactoryDefault()
+
+	transport, err := thrift.NewTSocket(fmt.Sprintf("%s:%d",t.otddServerHost, t.otddServerPort))
+	if err != nil {
+		log.Println(fmt.Sprintf("error resolving address of otdd server %s:%v err:%v", t.otddServerHost, t.otddServerPort, err))
+		return nil,err
+	}
+	t.transport = transport
+	
+	useTransport,err := transportFactory.GetTransport(t.transport)
+	t.thriftClient = otdd.NewOtddTestRunnerServiceClientFactory(useTransport, protocolFactory)
+	if err := t.transport.Open(); err != nil {
+		log.Println(fmt.Sprintf("Error connect to otdd server %s:%v err:%v", t.otddServerHost, t.otddServerPort,err))
+		return nil,err
+	}
+	return t.thriftClient,nil
+	
+}
+
+func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
 	log.Println(fmt.Sprintf("fetch test from otdd server: %s:%d",t.otddServerHost,t.otddServerPort))
+	//t.thriftClient.fetchTest()
 	return nil,errors.New("no test fetched.")
 }
 
-func (t *TestRunner) runTest(test *TestCase) *TestResult {
-	log.Println(fmt.Sprintf("start to run test. test id: %s",test.testId))
-	result := &TestResult {
+func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult_ {
+	log.Println(fmt.Sprintf("start to run test. test id: %s",test.TestId))
+	result := &otdd.TestResult_ {
 	}
-	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.port));
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
-		result.inboundRequestErr = err.Error()
+		result.InboundRequestErr = err.Error()
 		return result
 	}
 	defer conn.Close()
 	t.setTestStarted(test)
 	defer t.setTestStoped()
-	conn.Write(test.inboundRequest)
+	conn.Write(test.InboundRequest)
 	tmp := make([]byte, 2048)
 	bytesRead := 0
 	for{
@@ -123,29 +158,29 @@ func (t *TestRunner) runTest(test *TestCase) *TestResult {
 				if bytesRead > 0 {
                                		return result
 				} else {
-					result.inboundResponseErr = err.Error()
+					result.InboundResponseErr = err.Error()
 					return result
 				}
 			} else { 
-				result.inboundResponseErr = err.Error() 
+				result.InboundResponseErr = err.Error() 
 				return result
 			}
                 }
 		bytesRead += n
 		conn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
-		result.inboundResponse = append(result.inboundResponse,tmp[:n]...)
+		result.InboundResponse = append(result.InboundResponse,tmp[:n]...)
 	}
 	return result
 }
 
-func (t *TestRunner) setTestStarted(test *TestCase) {
-	log.Println(fmt.Sprintf("test started. test id: %s",test.testId))
+func (t *TestRunner) setTestStarted(test *otdd.TestCase) {
+	log.Println(fmt.Sprintf("test started. test id: %s",test.TestId))
 	t.currentTestCase = test
 }
 
 func (t *TestRunner) setTestStoped() {
 	if t.currentTestCase != nil {
-		log.Println(fmt.Sprintf("test stopped. test id: %s",t.currentTestCase.testId))
+		log.Println(fmt.Sprintf("test stopped. test id: %s",t.currentTestCase.TestId))
 		t.currentTestCase = nil
 	}
 }
@@ -154,8 +189,8 @@ func (t *TestRunner) isTestRunning() bool {
 	return t.currentTestCase != nil
 }
 
-func (t *TestRunner) reportTestResult(result *TestResult) error{
-	log.Println(fmt.Sprintf("report test result, test id: %s",result.testId))
+func (t *TestRunner) reportTestResult(result *otdd.TestResult_) error{
+	log.Println(fmt.Sprintf("report test result, test id: %s",result.TestId))
 	return nil
 }
 
@@ -249,7 +284,7 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 		return false
 	}
 
-        for _,ipPort := range t.currentTestCase.passthroughConnections {
+        for _,ipPort := range t.currentTestCase.PassthroughConnections {
                 if ipPort == "" {
                         continue
                 }
