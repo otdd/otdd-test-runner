@@ -3,6 +3,7 @@ package main
 import (
 	//"os"
 	"io"
+	"context"
 	"net"
 	"fmt"
 	"syscall"
@@ -12,8 +13,10 @@ import (
 	"time"
 	"errors"
 	"strconv"
-	otdd "otdd-test-runner/thrift/gen-go/otdd"
-	"github.com/apache/thrift/lib/go/thrift"
+	"google.golang.org/grpc"
+	otdd "otdd-test-runner/testrunner"
+	//"github.com/apache/thrift/lib/go/thrift"
+        //pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	//"bytes"
 	//"encoding/base64"
 )
@@ -60,8 +63,10 @@ type TestRunner struct {
 	otddServerHost string
 	otddServerPort int
 	currentTestCase *otdd.TestCase
-	thriftClient *otdd.OtddTestRunnerServiceClient
-	transport thrift.TTransport
+	grpcClient otdd.TestRunnerServiceClient
+	grpcConn *grpc.ClientConn
+	//thriftClient *otdd.OtddTestRunnerServiceClient
+	//transport thrift.TTransport
 }
 
 func NewTestRunner(username string,tag string,macAddr string,listenPort int,
@@ -86,6 +91,7 @@ func (t *TestRunner) Start() error {
 		//fetch a test from otdd server.
 		test,err := t.fetchTest(); 
 		if err !=nil {
+			log.Println(fmt.Sprintf("failed to fetch test: %v",err))
 			continue
 		}
 		//run the test
@@ -97,42 +103,54 @@ func (t *TestRunner) Start() error {
 	}
 }
 
-func (t *TestRunner) getOtddThriftClient() (*otdd.OtddTestRunnerServiceClient,error) {
+func (t *TestRunner) getOtddGrpcClient() (otdd.TestRunnerServiceClient,error) {
 
-	if t.transport.IsOpen() {
-		return t.thriftClient,nil
+	//if t.grpcConn != nil && !t.grpcConn.Closed() {
+	if t.grpcClient != nil {
+		return t.grpcClient,nil
 	}
 
-	// connecto to otdd server
-	transportFactory := thrift.NewTFramedTransportFactory(thrift.NewTTransportFactory())
-	protocolFactory := thrift.NewTBinaryProtocolFactoryDefault()
+	/*
+	if t.grpcConn != nil {
+		t.grpcConn.Close()
+		t.grpcConn = nil
+	}
+	*/
 
-	transport, err := thrift.NewTSocket(fmt.Sprintf("%s:%d",t.otddServerHost, t.otddServerPort))
-	if err != nil {
-		log.Println(fmt.Sprintf("error resolving address of otdd server %s:%v err:%v", t.otddServerHost, t.otddServerPort, err))
+	// connect to otdd server
+	//conn, err := grpc.Dial(fmt.Sprintf("%s:%v",t.otddServerHost,t.otddServerPort), grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%v",t.otddServerHost,t.otddServerPort), grpc.WithInsecure())
+ 	if err != nil {
+		log.Println(fmt.Sprintf("cannot connect to otdd server %s:%v err: %v", t.otddServerHost,t.otddServerPort,err))
 		return nil,err
 	}
-	t.transport = transport
-	
-	useTransport,err := transportFactory.GetTransport(t.transport)
-	t.thriftClient = otdd.NewOtddTestRunnerServiceClientFactory(useTransport, protocolFactory)
-	if err := t.transport.Open(); err != nil {
-		log.Println(fmt.Sprintf("Error connect to otdd server %s:%v err:%v", t.otddServerHost, t.otddServerPort,err))
-		return nil,err
-	}
-	return t.thriftClient,nil
+	//t.grpcConn = conn
+	t.grpcClient = otdd.NewTestRunnerServiceClient(conn)	
+	return t.grpcClient,nil
 	
 }
 
 func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
 	log.Println(fmt.Sprintf("fetch test from otdd server: %s:%d",t.otddServerHost,t.otddServerPort))
-	//t.thriftClient.fetchTest()
-	return nil,errors.New("no test fetched.")
+	c,err := t.getOtddGrpcClient()
+	if err!=nil {
+		return nil,err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+        defer cancel()
+	test,err := c.FetchTestCase(ctx,&otdd.FetchTestCaseReq{Username:t.username,Tag:t.tag,Mac:t.macAddr})
+	if err!=nil {
+		return nil,err
+	}
+	if test == nil {
+		return nil,errors.New("no test fetched.")
+	}
+	return test,nil
 }
 
-func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult_ {
+func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	log.Println(fmt.Sprintf("start to run test. test id: %s",test.TestId))
-	result := &otdd.TestResult_ {
+	result := &otdd.TestResult {
 	}
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
@@ -189,8 +207,19 @@ func (t *TestRunner) isTestRunning() bool {
 	return t.currentTestCase != nil
 }
 
-func (t *TestRunner) reportTestResult(result *otdd.TestResult_) error{
+func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
 	log.Println(fmt.Sprintf("report test result, test id: %s",result.TestId))
+	c,err := t.getOtddGrpcClient()
+	if err!=nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+        defer cancel()
+	_,err = c.ReportTestResult(ctx,result)
+	if err!=nil {
+		return err
+	}
+	log.Println(fmt.Sprintf("test result reported, test id: %s",result.TestId))
 	return nil
 }
 
@@ -246,7 +275,7 @@ func (t *TestRunner) connHandler(conn net.Conn) {
 					if len(accumulatedBytes)>0 || connectButSendNothingCnt > 10 {
 						nothingEverReceived = false
 						connectButSendNothingCnt = 0
-						outboundResponse, err := t.fetchOutboundRespFromOtdd(accumulatedBytes[:tmpBytesRead]); 
+						outboundResponse, err := t.fetchOutboundRespFromOtdd(t.currentTestCase.TestId,accumulatedBytes[:tmpBytesRead]); 
 						if err != nil {
 							return
 						}
@@ -311,8 +340,20 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 	return false
 }
 
-func (t *TestRunner) fetchOutboundRespFromOtdd(outbountRequests [] byte) ([] byte, error) {
-	return nil,nil
+func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,outbountReq [] byte) ([] byte, error) {
+	log.Println(fmt.Sprintf("fetch outbound resp for: %s",string(outbountReq[:])))
+	c,err := t.getOtddGrpcClient()
+	if err!=nil {
+		return nil,err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+        defer cancel()
+	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,OutboundReq:outbountReq})
+	if err!=nil {
+		return nil,err
+	}
+	log.Println(fmt.Sprintf("fetched outbound resp:%s for: %s",string(resp.OutboundResp[:]),string(outbountReq[:])))
+	return resp.OutboundResp, nil
 }
 
 func (t *TestRunner) fetchOutboundRespFromConn(outbountRequests [] byte, conn net.Conn) ([] byte, error) {

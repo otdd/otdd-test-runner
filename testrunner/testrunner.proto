@@ -1,0 +1,50 @@
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.otdd.testrunner";
+option java_outer_classname = "TestRunnerProto";
+
+package testrunner;
+
+service TestRunnerService{
+	rpc FetchTestCase (FetchTestCaseReq) returns (TestCase) {}
+	rpc FetchOutboundResp (FetchOutboundRespReq) returns (FetchOutboundRespResp) {}
+	rpc ReportTestResult (TestResult) returns (ReportTestResultResp) {}
+}
+
+message FetchTestCaseReq {
+	string username = 1;
+	string tag = 2;
+	string mac = 3;
+}
+
+message TestCase {
+	string testId = 1;
+        string runId = 2;
+        int32 port = 3;
+        repeated string passthroughConnections = 4;
+        bytes inboundRequest = 5;
+}
+
+message FetchOutboundRespReq {
+	string testId = 1;
+	bytes outboundReq = 2;
+}
+
+message FetchOutboundRespResp{
+	bytes outboundResp = 1;
+}
+
+message TestResult{
+        string testId = 1;
+        string runId = 2;
+        bytes inboundRequest = 3;
+        string inboundRequestErr = 4;
+        bytes inboundResponse = 5;
+        string inboundResponseErr = 6;
+}
+
+message ReportTestResultResp{
+	bool result = 1;
+}
