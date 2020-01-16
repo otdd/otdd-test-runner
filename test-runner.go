@@ -87,7 +87,7 @@ func (t *TestRunner) Start() error {
 	//listen on port to receive out-bound requests redirected by iptables.
 	go t.listen()
 	for {
-		time.Sleep(10*time.Second)
+		time.Sleep(3*time.Second)
 		//fetch a test from otdd server.
 		test,err := t.fetchTest(); 
 		if err !=nil {
@@ -98,6 +98,8 @@ func (t *TestRunner) Start() error {
 		result := t.runTest(test)
 		
 		//report the test's result
+		//log.Println(fmt.Sprintf("test result: %v",string(test.InboundRequest[:])))
+		log.Println(fmt.Sprintf("test result: %v",result))
 		t.reportTestResult(result)
 
 	}
@@ -131,7 +133,7 @@ func (t *TestRunner) getOtddGrpcClient() (otdd.TestRunnerServiceClient,error) {
 }
 
 func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
-	log.Println(fmt.Sprintf("fetch test from otdd server: %s:%d",t.otddServerHost,t.otddServerPort))
+	log.Println(fmt.Sprintf("fetch test from otdd server: %s:%d ",t.otddServerHost,t.otddServerPort))
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return nil,err
@@ -151,6 +153,7 @@ func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
 func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	log.Println(fmt.Sprintf("start to run test. test id: %s",test.TestId))
 	result := &otdd.TestResult {
+		TestId:test.TestId,
 	}
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
@@ -160,7 +163,9 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	defer conn.Close()
 	t.setTestStarted(test)
 	defer t.setTestStoped()
-	conn.Write(test.InboundRequest)
+	
+	log.Println(fmt.Sprintf("sending to 127.0.0.1:%v req: %s",test.Port,string(test.InboundRequest[:])))
+	conn.Write(test.InboundRequest[:])
 	tmp := make([]byte, 2048)
 	bytesRead := 0
 	for{
@@ -198,6 +203,8 @@ func (t *TestRunner) setTestStarted(test *otdd.TestCase) {
 
 func (t *TestRunner) setTestStoped() {
 	if t.currentTestCase != nil {
+		//wait for 1 second to collect potential outbound req/resp after inbound resp is received.
+		time.Sleep(1 * time.Second)
 		log.Println(fmt.Sprintf("test stopped. test id: %s",t.currentTestCase.TestId))
 		t.currentTestCase = nil
 	}
@@ -352,7 +359,7 @@ func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,outbountReq [] byte
 	if err!=nil {
 		return nil,err
 	}
-	log.Println(fmt.Sprintf("fetched outbound resp:%s for: %s",string(resp.OutboundResp[:]),string(outbountReq[:])))
+	log.Println(fmt.Sprintf("fetched outbound resp:%s",string(resp.OutboundResp[:])))
 	return resp.OutboundResp, nil
 }
 

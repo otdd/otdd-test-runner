@@ -45,7 +45,9 @@ func getMacAddr() string{
 		panic("Error : " + err.Error())
 	}
 	for _,inter := range interfaces {
-		return inter.HardwareAddr.String()
+		if inter.HardwareAddr.String() != "" {
+			return inter.HardwareAddr.String()
+		}
 	}
 	return ""
 }

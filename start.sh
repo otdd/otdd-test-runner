@@ -1,3 +1,3 @@
 #!/bin/sh
 
-./otdd-test-runner -h 127.0.0.1 -u yipjie -t review
+./otdd-test-runner -h 192.168.1.101 -p 8764 -u yipjie -t review

@@ -2,7 +2,7 @@
 syntax = "proto3";
 
 option java_multiple_files = true;
-option java_package = "io.otdd.testrunner";
+option java_package = "io.otdd.otddserver";
 option java_outer_classname = "TestRunnerProto";
 
 package testrunner;
