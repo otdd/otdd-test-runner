@@ -55,5 +55,6 @@ message LogReq {
 	string testId = 2;
 	string log = 3;
 	int64 timestamp = 4;
+	string level = 5;
 }
 

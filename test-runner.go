@@ -97,12 +97,12 @@ func (t *TestRunner) Start() error {
 
 		if result.InboundResponse != nil && len(result.InboundResponse) > 0 {
 			logStr := fmt.Sprintf("inboundResp:\n\n********************\n%s\n********************\n\n",string(result.InboundResponse[:]))
-			t.logToServer(result.TestId,result.RunId,logStr)
+			t.logToServer(result.TestId,result.RunId,logStr,"info")
 			log.Println(logStr)
 		}
 		if len(result.InboundResponseErr) > 0 {
 			logStr := fmt.Sprintf("inboundRespErr:\n\n********************\n%s\n********************\n\n",string(result.InboundResponseErr))
-			t.logToServer(result.TestId,result.RunId,logStr)
+			t.logToServer(result.TestId,result.RunId,logStr,"error")
 			log.Println(logStr)
 		}
 		t.reportTestResult(result)
@@ -169,7 +169,8 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
 		result.InboundRequestErr = err.Error()
-		t.logToServer(test.TestId,test.RunId,fmt.Sprintf("failed to send inbound request, err:%v",err))
+		logStr := fmt.Sprintf("failed to send inbound request, err:%v",err)
+		t.logToServer(test.TestId,test.RunId,logStr,"error")
 		return result
 	}
 	defer conn.Close()
@@ -177,7 +178,7 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	defer t.setTestStoped()
 
 	logStr := fmt.Sprintf("sending to 127.0.0.1:%v req: \n\n********************\n%s\n********************\n\n",test.Port,string(test.InboundRequest[:]))	
-	t.logToServer(test.TestId,test.RunId,logStr)
+	t.logToServer(test.TestId,test.RunId,logStr,"info")
 	log.Println(logStr)
 	conn.Write(test.InboundRequest[:])
 	tmp := make([]byte, 2048)
@@ -241,7 +242,7 @@ func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
 		return err
 	}
 	logStr := fmt.Sprintf("test result reported, test id: %s, run id: %s",result.TestId, result.RunId)
-	t.logToServer(result.TestId,result.RunId,logStr)
+	t.logToServer(result.TestId,result.RunId,logStr,"info")
 	log.Println(logStr)
 	return nil
 }
@@ -365,7 +366,7 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 
 func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbountReq [] byte) ([] byte, error) {
 	logStr := fmt.Sprintf("fetch outbound resp from otddserver for:\n\n********************\n%s\n********************\n",string(outbountReq[:]))
-	t.logToServer(testId,runId,logStr)
+	t.logToServer(testId,runId,logStr,"info")
 	log.Println(logStr)
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
@@ -376,18 +377,18 @@ func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbou
 	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,RunId:runId,OutboundReq:outbountReq})
 	if err!=nil {
 		logStr = fmt.Sprintf("no outbound resp fetched. err:%v",err)
-		t.logToServer(testId,runId,logStr)
+		t.logToServer(testId,runId,logStr,"warn")
 		log.Println(logStr)
 		return nil,err
 	}
 	if resp == nil || resp.OutboundResp == nil {
 		logStr = fmt.Sprintf("no outbound resp fetched.")
-		t.logToServer(testId,runId,logStr)
+		t.logToServer(testId,runId,logStr,"warn")
 		log.Println(logStr)
 		return nil,errors.New("no resp fetched.")
 	}
 	logStr = fmt.Sprintf("fetched outbound resp: \n\n********************\n%s\n********************\n\n",string(resp.OutboundResp[:]))
-	t.logToServer(testId,runId,logStr)
+	t.logToServer(testId,runId,logStr,"info")
 	log.Println(logStr)
 	return resp.OutboundResp, nil
 }
@@ -466,12 +467,12 @@ func itod(i uint) string {
         return string(b[bp:])
 }
 
-func (t *TestRunner) logToServer(testId string, runId string, logStr string) {
+func (t *TestRunner) logToServer(testId string, runId string, logStr string, level string) {
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
         defer cancel()
-	c.Log(ctx,&otdd.LogReq{TestId:testId,RunId:runId,Log:logStr,Timestamp:time.Now().Unix()})
+	c.Log(ctx,&otdd.LogReq{TestId:testId,RunId:runId,Log:logStr,Timestamp:time.Now().Unix(),Level:level})
 }
