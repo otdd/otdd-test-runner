@@ -29,7 +29,8 @@ message TestCase {
 
 message FetchOutboundRespReq {
 	string testId = 1;
-	bytes outboundReq = 2;
+	string runId = 2;
+	bytes outboundReq = 3;
 }
 
 message FetchOutboundRespResp{

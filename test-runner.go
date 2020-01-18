@@ -87,7 +87,7 @@ func (t *TestRunner) Start() error {
 	//listen on port to receive out-bound requests redirected by iptables.
 	go t.listen()
 	for {
-		time.Sleep(3*time.Second)
+		time.Sleep( 3 * time.Second)
 		//fetch a test from otdd server.
 		test,err := t.fetchTest(); 
 		if err !=nil {
@@ -138,20 +138,20 @@ func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
 	if err!=nil {
 		return nil,err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
         defer cancel()
 	test,err := c.FetchTestCase(ctx,&otdd.FetchTestCaseReq{Username:t.username,Tag:t.tag,Mac:t.macAddr})
 	if err!=nil {
 		return nil,err
 	}
-	if test == nil {
+	if test == nil || test.TestId == "" {
 		return nil,errors.New("no test fetched.")
 	}
 	return test,nil
 }
 
 func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
-	log.Println(fmt.Sprintf("start to run test. test id: %s",test.TestId))
+	log.Println(fmt.Sprintf("start to run test. test id: %s, run id: %v",test.TestId,test.RunId))
 	result := &otdd.TestResult {
 		TestId:test.TestId,
 	}
@@ -220,7 +220,7 @@ func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
 	if err!=nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
         defer cancel()
 	_,err = c.ReportTestResult(ctx,result)
 	if err!=nil {
@@ -282,7 +282,7 @@ func (t *TestRunner) connHandler(conn net.Conn) {
 					if len(accumulatedBytes)>0 || connectButSendNothingCnt > 10 {
 						nothingEverReceived = false
 						connectButSendNothingCnt = 0
-						outboundResponse, err := t.fetchOutboundRespFromOtdd(t.currentTestCase.TestId,accumulatedBytes[:tmpBytesRead]); 
+						outboundResponse, err := t.fetchOutboundRespFromOtdd(t.currentTestCase.TestId,t.currentTestCase.RunId,accumulatedBytes[:tmpBytesRead]); 
 						if err != nil {
 							return
 						}
@@ -347,15 +347,15 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 	return false
 }
 
-func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,outbountReq [] byte) ([] byte, error) {
+func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbountReq [] byte) ([] byte, error) {
 	log.Println(fmt.Sprintf("fetch outbound resp for: %s",string(outbountReq[:])))
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return nil,err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
         defer cancel()
-	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,OutboundReq:outbountReq})
+	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,RunId:runId,OutboundReq:outbountReq})
 	if err!=nil {
 		return nil,err
 	}
