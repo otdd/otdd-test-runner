@@ -474,5 +474,5 @@ func (t *TestRunner) logToServer(testId string, runId string, logStr string, lev
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
         defer cancel()
-	c.Log(ctx,&otdd.LogReq{TestId:testId,RunId:runId,Log:logStr,Timestamp:time.Now().Unix(),Level:level})
+	c.Log(ctx,&otdd.LogReq{TestId:testId,RunId:runId,Log:logStr,Timestamp:time.Now().UnixNano()/1000000,Level:level})
 }
