@@ -87,19 +87,14 @@ func (t *TestRunner) Start() error {
 	//listen on port to receive out-bound requests redirected by iptables.
 	go t.listen()
 	for {
-		time.Sleep( 3 * time.Second)
 		//fetch a test from otdd server.
-		test,err := t.fetchTest(); 
-		if err !=nil {
-			log.Println(fmt.Sprintf("failed to fetch test: %v",err))
-			continue
-		}
+		test := t.fetchTest(); 
+
 		//run the test
 		result := t.runTest(test)
 		
 		//report the test's result
-		//log.Println(fmt.Sprintf("test result: %v",string(test.InboundRequest[:])))
-		log.Println(fmt.Sprintf("test result: %v",result))
+		log.Println(fmt.Sprintf("inboundResp:\n\n********************\n%s\n********************\n\n",string(result.InboundResponse[:])))
 		t.reportTestResult(result)
 
 	}
@@ -132,22 +127,27 @@ func (t *TestRunner) getOtddGrpcClient() (otdd.TestRunnerServiceClient,error) {
 	
 }
 
-func (t *TestRunner) fetchTest() (*otdd.TestCase,error) {
-	log.Println(fmt.Sprintf("fetch test from otdd server: %s:%d ",t.otddServerHost,t.otddServerPort))
-	c,err := t.getOtddGrpcClient()
-	if err!=nil {
-		return nil,err
+func (t *TestRunner) fetchTest() *otdd.TestCase {
+	log.Println(fmt.Sprintf("fetching test from otdd server: %s:%d ",t.otddServerHost,t.otddServerPort))
+	for {
+		time.Sleep( 3 * time.Second)
+		c,err := t.getOtddGrpcClient()
+		if err!=nil {
+			log.Println(fmt.Sprintf("%v",err))
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+        	defer cancel()
+		test,err := c.FetchTestCase(ctx,&otdd.FetchTestCaseReq{Username:t.username,Tag:t.tag,Mac:t.macAddr})
+		if err!=nil {
+			log.Println(fmt.Sprintf("%v",err))
+			continue
+		}
+		if test == nil || test.TestId == "" {
+			continue
+		}
+		return test
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-        defer cancel()
-	test,err := c.FetchTestCase(ctx,&otdd.FetchTestCaseReq{Username:t.username,Tag:t.tag,Mac:t.macAddr})
-	if err!=nil {
-		return nil,err
-	}
-	if test == nil || test.TestId == "" {
-		return nil,errors.New("no test fetched.")
-	}
-	return test,nil
 }
 
 func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
@@ -164,7 +164,7 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	t.setTestStarted(test)
 	defer t.setTestStoped()
 	
-	log.Println(fmt.Sprintf("sending to 127.0.0.1:%v req: %s",test.Port,string(test.InboundRequest[:])))
+	log.Println(fmt.Sprintf("sending to 127.0.0.1:%v req: \n\n********************\n%s\n********************\n\n",test.Port,string(test.InboundRequest[:])))
 	conn.Write(test.InboundRequest[:])
 	tmp := make([]byte, 2048)
 	bytesRead := 0
@@ -248,7 +248,7 @@ func (t *TestRunner) listen() {
 }
 
 func (t *TestRunner) connHandler(conn net.Conn) {
-	log.Println("connection accepted, local:",conn.LocalAddr()," remote:",conn.RemoteAddr())
+	//log.Println("connection accepted, local:",conn.LocalAddr()," remote:",conn.RemoteAddr())
         defer conn.Close()
 	var originalConn net.Conn
 	if !t.isTestRunning() || t.needPassthrough(conn) {
@@ -348,7 +348,7 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 }
 
 func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbountReq [] byte) ([] byte, error) {
-	log.Println(fmt.Sprintf("fetch outbound resp for: %s",string(outbountReq[:])))
+	log.Println(fmt.Sprintf("fetch outbound resp from otddserver for:\n\n********************\n%s\n********************\n",string(outbountReq[:])))
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return nil,err
@@ -357,9 +357,14 @@ func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbou
         defer cancel()
 	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,RunId:runId,OutboundReq:outbountReq})
 	if err!=nil {
+		log.Println(fmt.Sprintf("no outbound resp fetched. err:%v",err))
 		return nil,err
 	}
-	log.Println(fmt.Sprintf("fetched outbound resp:%s",string(resp.OutboundResp[:])))
+	if resp == nil || resp.OutboundResp == nil {
+		log.Println(fmt.Sprintf("no outbound resp fetched."))
+		return nil,errors.New("no resp fetched.")
+	}
+	log.Println(fmt.Sprintf("fetched outbound resp: \n\n********************\n%s\n********************\n\n",string(resp.OutboundResp[:])))
 	return resp.OutboundResp, nil
 }
 
