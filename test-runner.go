@@ -154,6 +154,7 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	log.Println(fmt.Sprintf("start to run test. test id: %s, run id: %v",test.TestId,test.RunId))
 	result := &otdd.TestResult {
 		TestId:test.TestId,
+		RunId:test.RunId,
 	}
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
@@ -215,7 +216,7 @@ func (t *TestRunner) isTestRunning() bool {
 }
 
 func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
-	log.Println(fmt.Sprintf("report test result, test id: %s",result.TestId))
+	log.Println(fmt.Sprintf("report test result, test id: %s, run id: %s",result.TestId, result.RunId))
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return err
@@ -226,7 +227,7 @@ func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
 	if err!=nil {
 		return err
 	}
-	log.Println(fmt.Sprintf("test result reported, test id: %s",result.TestId))
+	log.Println(fmt.Sprintf("test result reported, test id: %s, run id: %s",result.TestId, result.RunId))
 	return nil
 }
 
