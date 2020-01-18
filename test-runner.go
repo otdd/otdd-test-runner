@@ -94,7 +94,17 @@ func (t *TestRunner) Start() error {
 		result := t.runTest(test)
 		
 		//report the test's result
-		log.Println(fmt.Sprintf("inboundResp:\n\n********************\n%s\n********************\n\n",string(result.InboundResponse[:])))
+
+		if result.InboundResponse != nil && len(result.InboundResponse) > 0 {
+			logStr := fmt.Sprintf("inboundResp:\n\n********************\n%s\n********************\n\n",string(result.InboundResponse[:]))
+			t.logToServer(result.TestId,result.RunId,logStr)
+			log.Println(logStr)
+		}
+		if len(result.InboundResponseErr) > 0 {
+			logStr := fmt.Sprintf("inboundRespErr:\n\n********************\n%s\n********************\n\n",string(result.InboundResponseErr))
+			t.logToServer(result.TestId,result.RunId,logStr)
+			log.Println(logStr)
+		}
 		t.reportTestResult(result)
 
 	}
@@ -159,13 +169,16 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
 	if err !=nil {
 		result.InboundRequestErr = err.Error()
+		t.logToServer(test.TestId,test.RunId,fmt.Sprintf("failed to send inbound request, err:%v",err))
 		return result
 	}
 	defer conn.Close()
 	t.setTestStarted(test)
 	defer t.setTestStoped()
-	
-	log.Println(fmt.Sprintf("sending to 127.0.0.1:%v req: \n\n********************\n%s\n********************\n\n",test.Port,string(test.InboundRequest[:])))
+
+	logStr := fmt.Sprintf("sending to 127.0.0.1:%v req: \n\n********************\n%s\n********************\n\n",test.Port,string(test.InboundRequest[:]))	
+	t.logToServer(test.TestId,test.RunId,logStr)
+	log.Println(logStr)
 	conn.Write(test.InboundRequest[:])
 	tmp := make([]byte, 2048)
 	bytesRead := 0
@@ -227,7 +240,9 @@ func (t *TestRunner) reportTestResult(result *otdd.TestResult) error{
 	if err!=nil {
 		return err
 	}
-	log.Println(fmt.Sprintf("test result reported, test id: %s, run id: %s",result.TestId, result.RunId))
+	logStr := fmt.Sprintf("test result reported, test id: %s, run id: %s",result.TestId, result.RunId)
+	t.logToServer(result.TestId,result.RunId,logStr)
+	log.Println(logStr)
 	return nil
 }
 
@@ -349,7 +364,9 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 }
 
 func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbountReq [] byte) ([] byte, error) {
-	log.Println(fmt.Sprintf("fetch outbound resp from otddserver for:\n\n********************\n%s\n********************\n",string(outbountReq[:])))
+	logStr := fmt.Sprintf("fetch outbound resp from otddserver for:\n\n********************\n%s\n********************\n",string(outbountReq[:]))
+	t.logToServer(testId,runId,logStr)
+	log.Println(logStr)
 	c,err := t.getOtddGrpcClient()
 	if err!=nil {
 		return nil,err
@@ -358,14 +375,20 @@ func (t *TestRunner) fetchOutboundRespFromOtdd(testId string,runId string,outbou
         defer cancel()
 	resp,err := c.FetchOutboundResp(ctx,&otdd.FetchOutboundRespReq{TestId:testId,RunId:runId,OutboundReq:outbountReq})
 	if err!=nil {
-		log.Println(fmt.Sprintf("no outbound resp fetched. err:%v",err))
+		logStr = fmt.Sprintf("no outbound resp fetched. err:%v",err)
+		t.logToServer(testId,runId,logStr)
+		log.Println(logStr)
 		return nil,err
 	}
 	if resp == nil || resp.OutboundResp == nil {
-		log.Println(fmt.Sprintf("no outbound resp fetched."))
+		logStr = fmt.Sprintf("no outbound resp fetched.")
+		t.logToServer(testId,runId,logStr)
+		log.Println(logStr)
 		return nil,errors.New("no resp fetched.")
 	}
-	log.Println(fmt.Sprintf("fetched outbound resp: \n\n********************\n%s\n********************\n\n",string(resp.OutboundResp[:])))
+	logStr = fmt.Sprintf("fetched outbound resp: \n\n********************\n%s\n********************\n\n",string(resp.OutboundResp[:]))
+	t.logToServer(testId,runId,logStr)
+	log.Println(logStr)
 	return resp.OutboundResp, nil
 }
 
@@ -443,3 +466,12 @@ func itod(i uint) string {
         return string(b[bp:])
 }
 
+func (t *TestRunner) logToServer(testId string, runId string, logStr string) {
+	c,err := t.getOtddGrpcClient()
+	if err!=nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
+        defer cancel()
+	c.Log(ctx,&otdd.LogReq{TestId:testId,RunId:runId,Log:logStr,Timestamp:time.Now().Unix()})
+}

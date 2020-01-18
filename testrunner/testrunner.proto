@@ -1,16 +1,17 @@
-
 syntax = "proto3";
 
 option java_multiple_files = true;
 option java_package = "io.otdd.otddserver";
 option java_outer_classname = "TestRunnerProto";
 
+import "google/protobuf/empty.proto";
 package testrunner;
 
 service TestRunnerService{
 	rpc FetchTestCase (FetchTestCaseReq) returns (TestCase) {}
 	rpc FetchOutboundResp (FetchOutboundRespReq) returns (FetchOutboundRespResp) {}
 	rpc ReportTestResult (TestResult) returns (ReportTestResultResp) {}
+	rpc Log (LogReq) returns (google.protobuf.Empty) {}
 }
 
 message FetchTestCaseReq {
@@ -48,3 +49,11 @@ message TestResult{
 message ReportTestResultResp{
 	bool result = 1;
 }
+
+message LogReq {
+	string runId = 1;
+	string testId = 2;
+	string log = 3;
+	int64 timestamp = 4;
+}
+
