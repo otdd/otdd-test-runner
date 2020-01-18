@@ -133,14 +133,14 @@ func (t *TestRunner) fetchTest() *otdd.TestCase {
 		time.Sleep( 3 * time.Second)
 		c,err := t.getOtddGrpcClient()
 		if err!=nil {
-			log.Println(fmt.Sprintf("%v",err))
+			log.Println(fmt.Sprintf("fetch test err:%v",err))
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
         	defer cancel()
 		test,err := c.FetchTestCase(ctx,&otdd.FetchTestCaseReq{Username:t.username,Tag:t.tag,Mac:t.macAddr})
 		if err!=nil {
-			log.Println(fmt.Sprintf("%v",err))
+			log.Println(fmt.Sprintf("fetch test err:%v",err))
 			continue
 		}
 		if test == nil || test.TestId == "" {

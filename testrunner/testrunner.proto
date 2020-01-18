@@ -40,10 +40,9 @@ message FetchOutboundRespResp{
 message TestResult{
         string testId = 1;
         string runId = 2;
-        bytes inboundRequest = 3;
-        string inboundRequestErr = 4;
-        bytes inboundResponse = 5;
-        string inboundResponseErr = 6;
+        string inboundRequestErr = 3;
+        bytes inboundResponse = 4;
+        string inboundResponseErr = 5;
 }
 
 message ReportTestResultResp{
