@@ -332,6 +332,10 @@ func (t *TestRunner) needPassthrough(conn net.Conn) bool {
 		return false
 	}
 
+	if t.currentTestCase.MockOutboundConnections == 0 {
+		return true
+	}
+
 	dst, dport, err := t.getOriginalDestination(conn) 
 	if err != nil {
 		return false

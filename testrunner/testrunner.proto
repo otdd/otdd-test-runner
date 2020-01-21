@@ -24,8 +24,9 @@ message TestCase {
 	string testId = 1;
         string runId = 2;
         int32 port = 3;
-        repeated string passthroughConnections = 4;
-        bytes inboundRequest = 5;
+        int32 mockOutboundConnections = 4;
+        repeated string passthroughConnections = 5;
+        bytes inboundRequest = 6;
 }
 
 message FetchOutboundRespReq {
