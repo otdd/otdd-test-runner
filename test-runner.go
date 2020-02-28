@@ -166,7 +166,7 @@ func (t *TestRunner) runTest(test *otdd.TestCase) *otdd.TestResult {
 		TestId:test.TestId,
 		RunId:test.RunId,
 	}
-	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port));
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%v", test.Port), 5*time.Second);
 	if err !=nil {
 		result.InboundRequestErr = err.Error()
 		logStr := fmt.Sprintf("failed to send inbound request, err:%v",err)
@@ -271,7 +271,7 @@ func (t *TestRunner) connHandler(conn net.Conn) {
 	if !t.isTestRunning() || t.needPassthrough(conn) {
 		if dst, dport, err := t.getOriginalDestination(conn); err == nil {
 			log.Println(fmt.Sprintf("connecting to original destination on %s:%d",dst,dport))
-			originalConn, err = net.Dial("tcp", fmt.Sprintf("%s:%v", dst, dport)); 
+			originalConn, err = net.DialTimeout("tcp", fmt.Sprintf("%s:%v", dst, dport),5*time.Second); 
 			if err != nil{
 				log.Println(fmt.Sprintf("failed to connect to original destination %s:%d, err:%v",dst,dport,err))
 				return
