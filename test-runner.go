@@ -14,7 +14,7 @@ import (
 	"errors"
 	"strconv"
 	"google.golang.org/grpc"
-	otdd "otdd-test-runner/testrunner"
+	otdd "otdd.io/otdd-test-runner/testrunner"
 	//"github.com/apache/thrift/lib/go/thrift"
         //pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	//"bytes"
@@ -117,15 +117,8 @@ func (t *TestRunner) getOtddGrpcClient() (otdd.TestRunnerServiceClient,error) {
 		return t.grpcClient,nil
 	}
 
-	/*
-	if t.grpcConn != nil {
-		t.grpcConn.Close()
-		t.grpcConn = nil
-	}
-	*/
-
 	// connect to otdd server
-	//conn, err := grpc.Dial(fmt.Sprintf("%s:%v",t.otddServerHost,t.otddServerPort), grpc.WithInsecure(), grpc.WithBlock())
+	// conn, err := grpc.Dial(fmt.Sprintf("%s:%v",t.otddServerHost,t.otddServerPort), grpc.WithInsecure(), grpc.WithBlock())
 	conn, err := grpc.Dial(fmt.Sprintf("%s:%v",t.otddServerHost,t.otddServerPort), grpc.WithInsecure())
  	if err != nil {
 		log.Println(fmt.Sprintf("cannot connect to otdd server %s:%v err: %v", t.otddServerHost,t.otddServerPort,err))
